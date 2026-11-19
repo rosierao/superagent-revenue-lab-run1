@@ -39,3 +39,28 @@ def test_replayed_event_is_counted_once():
     ])
     report = daily_revenue(events)
     assert report["revenue_cents"].tolist() == [4000]
+
+
+def test_repeated_deliveries_do_not_inflate_daily_revenue():
+    # Regression: three webhook deliveries of evt_dup must count once, while a
+    # distinct event on the same order still counts.
+    events = frame([
+        ("evt_dup", "ord_10", "2026-10-30T09:00:00Z", "2026-10-30T09:00:01Z", 4000),
+        ("evt_fee", "ord_10", "2026-10-30T09:05:00Z", "2026-10-30T09:05:01Z", 600),
+        ("evt_dup", "ord_10", "2026-10-30T09:00:00Z", "2026-10-30T09:06:30Z", 4000),
+        ("evt_dup", "ord_10", "2026-10-30T09:00:00Z", "2026-10-30T09:12:00Z", 4000),
+    ])
+    report = daily_revenue(events)
+    assert report["revenue_cents"].tolist() == [4600]
+
+
+def test_replayed_event_does_not_hide_identical_same_order_payment():
+    # Two distinct 2000-cent payments on one order share timestamp and amount;
+    # one of them is delivered again. Both event IDs must still count once.
+    events = frame([
+        ("evt_x", "ord_11", "2026-10-30T09:00:00Z", "2026-10-30T09:00:01Z", 2000),
+        ("evt_y", "ord_11", "2026-10-30T09:00:00Z", "2026-10-30T09:00:01Z", 2000),
+        ("evt_x", "ord_11", "2026-10-30T09:00:00Z", "2026-10-30T09:06:30Z", 2000),
+    ])
+    report = daily_revenue(events)
+    assert report["revenue_cents"].tolist() == [4000]
